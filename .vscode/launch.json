@@ -1,0 +1,74 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'mr'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=mr"
+                ],
+                "filter": {
+                    "name": "mr",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'sequential'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=sequential",
+                    "--package=mr"
+                ],
+                "filter": {
+                    "name": "sequential",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "wc",
+                "/Users/mag1cian/dev/mr/files/pg-being_ernest.txt",
+                "/Users/mag1cian/dev/mr/files/pg-dorian_gray.txt",
+                "/Users/mag1cian/dev/mr/files/pg-frankenstein.txt",
+                "/Users/mag1cian/dev/mr/files/pg-grimm.txt",
+                "/Users/mag1cian/dev/mr/files/pg-huckleberry_finn.txt",
+                "/Users/mag1cian/dev/mr/files/pg-metamorphosis.txt",
+                "/Users/mag1cian/dev/mr/files/pg-sherlock_holmes.txt",
+                "/Users/mag1cian/dev/mr/files/pg-tom_sawyer.txt",
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'sequential'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=sequential",
+                    "--package=mr"
+                ],
+                "filter": {
+                    "name": "sequential",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
