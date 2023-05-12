@@ -13,6 +13,6 @@ appenders:
       pattern: "{d} - h({m}){n}"
 
 root:
-  level: warn
+  level: info
   appenders:
     - stdout
