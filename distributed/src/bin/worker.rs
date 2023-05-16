@@ -1,4 +1,5 @@
 use anyhow::Result;
+use common::{load_function, Mapf, Reducef};
 use distributed::{
     init_log,
     service::{
@@ -6,16 +7,26 @@ use distributed::{
     },
 };
 use log::{error, info};
-use tokio::time::{sleep, Duration};
+use tokio::{
+    fs::read_to_string,
+    time::{sleep, Duration},
+};
 use tonic::transport::Channel;
 
 struct Worker {
     client: MapReduceClient<Channel>,
+    mapf: Mapf,
+    reducef: Reducef,
 }
 
 impl Worker {
-    fn new(_app_name: &str, client: MapReduceClient<Channel>) -> Self {
-        Self { client }
+    fn new(app_name: &str, client: MapReduceClient<Channel>) -> Self {
+        let (mapf, reducef) = load_function(app_name);
+        Self {
+            client,
+            mapf,
+            reducef,
+        }
     }
 
     async fn heartbeat(&mut self) -> Result<HeartbeatReply> {
@@ -37,7 +48,9 @@ impl Worker {
         loop {
             let rly = self.heartbeat().await?;
             match TaskType::from_i32(rly.task_type) {
-                Some(TaskType::Map) => {}
+                Some(TaskType::Map) => {
+                    self.do_map(rly).await;
+                }
                 Some(TaskType::Reduce) => {}
                 Some(TaskType::Exit) => {
                     info!("Worker Exit");
@@ -53,8 +66,14 @@ impl Worker {
         }
     }
 
-    async fn do_map(&self, rly: HeartbeatReply) {
-        todo!()
+    async fn do_map(&self, rly: HeartbeatReply) -> Result<()> {
+        info!("do map task_id{}", rly.task_id);
+        let filename = rly.filename;
+        let content = read_to_string(&filename).await?;
+        let mapf = self.mapf;
+        let kva = mapf(&filename, &content);
+        //todo 
+        Ok(())
     }
 
     async fn do_reduce() {}
@@ -66,7 +85,7 @@ async fn main() -> Result<()> {
     info!("hello world");
     let addr = "http://[::1]:56789";
     let client = MapReduceClient::connect(addr).await?;
-    let mut worker = Worker::new("..", client);
+    let mut worker = Worker::new("wc", client);
     worker.run().await?;
     Ok(())
 }

@@ -8,7 +8,7 @@ appenders:
 
   requests:
     kind: file
-    path: "log/requests.log"
+    path: "log/mr.log"
     encoder:
       pattern: "{d} - h({m}){n}"
 
