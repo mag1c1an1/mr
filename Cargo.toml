@@ -1,2 +1,2 @@
 [workspace]
-members = ["distributed", "common"]
+members = ["distributed", "common","sequential"]
