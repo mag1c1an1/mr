@@ -1,8 +1,8 @@
+use ::time::macros::format_description;
 use anyhow::Result;
 use clap::Parser;
 use common::{App, KeyValue};
 use distributed::{
-    init_logger,
     service::{map_reduce_client::*, task::Inner, *},
     temp_file, ADDR,
 };
@@ -23,6 +23,7 @@ use tokio::{
     time,
 };
 use tracing::{info, instrument};
+use tracing_subscriber::fmt::time::LocalTime;
 use uuid::Uuid;
 
 #[derive(Parser, Debug)]
@@ -113,7 +114,7 @@ impl Worker {
 
     #[instrument]
     pub async fn run_map(&self, task: MapTask) -> Result<HashMap<u64, String>> {
-        info!("???");
+        info!("run map");
         let MapTask {
             index,
             files,
@@ -135,10 +136,10 @@ impl Worker {
             .collect_vec();
         let mut intermediate_files = vec![];
         for f in intermediate_filenames.iter() {
-            let ff = std::fs::File::create(f)?;
+            info!("{}",f);
+            let ff = std::fs::File::create(f).expect("create file failed");
             intermediate_files.push(ff);
         }
-
         for KeyValue { key, value } in k2v2s {
             let file_index = {
                 let mut hasher = DefaultHasher::new();
@@ -201,7 +202,7 @@ impl Worker {
     }
 
     #[instrument]
-    pub async fn run_reduce(&self, task: ReduceTask) -> Result<()> {
+    pub async fn do_reduce(&self, task: ReduceTask) -> Result<()> {
         let ReduceTask { index, files } = task;
         let mut kvs = vec![];
         for f in files.iter() {
@@ -216,7 +217,7 @@ impl Worker {
         }
         kvs.sort();
         let (temp_path, output_path) = (temp_file(), format!("mr-out-{}", index));
-        info!("tmp_path: {} ",temp_path);
+        info!("tmp_path: {} ", temp_path);
         let mut temp_file = std::fs::File::create(&temp_path)?;
         for (k, ks) in kvs.into_iter().group_by(|kv| kv.key.clone()).into_iter() {
             let output = self.app.reduce(&k, ks.map(|kv| kv.value).collect_vec());
@@ -227,7 +228,7 @@ impl Worker {
         Ok(())
     }
     #[instrument]
-    pub async fn do_reduce(&self, task: ReduceTask) -> Result<()> {
+    pub async fn run_reduce(&self, task: ReduceTask) -> Result<()> {
         // async write
         let ReduceTask { index, files } = task;
 
@@ -275,10 +276,24 @@ impl Worker {
         Ok(())
     }
 }
+const LOG_PATH: &str = "/Users/mag1cian/dev/mr/log";
+fn init_logger() -> tracing_appender::non_blocking::WorkerGuard {
+    let format = tracing_subscriber::fmt::format().pretty();
+    let appender = tracing_appender::rolling::never(LOG_PATH, "worker.log");
+    let (non_blockking_appender, guard) = tracing_appender::non_blocking(appender);
+    let lt = LocalTime::new(format_description!("[hour]:[minute]:[second]"));
+    tracing_subscriber::fmt()
+        .event_format(format)
+        .with_ansi(false)
+        .with_timer(lt)
+        .with_writer(non_blockking_appender)
+        .init();
+    guard
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_logger();
+    let _log_guard = init_logger();
 
     let cli = Cli::parse();
     let addr = format!("http://{}", cli.connect);

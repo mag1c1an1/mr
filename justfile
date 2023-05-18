@@ -47,4 +47,8 @@ clean_out:
     @rm -rf out
     @mkdir out
 
-clean: clean_app clean_tmp clean_out
+clean_log:
+    @rm -rf log
+    @mkdir log
+
+clean: clean_app clean_tmp clean_out clean_log

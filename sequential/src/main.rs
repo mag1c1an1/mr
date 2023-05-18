@@ -28,7 +28,7 @@ fn main() -> anyhow::Result<()> {
         .collect_vec();
     intermediate.sort();
 
-    let mut output_file = File::create(Path::new("out/mr-seq"))?;
+    let mut output_file = File::create(Path::new("mr-seq"))?;
     for (k, kvs) in intermediate
         .into_iter()
         .group_by(|kv| kv.key.clone())

@@ -18,12 +18,8 @@ pub mod service {
 pub const ADDR: &str = "[::1]:56789";
 
 const TMP_PATH: &str = "/Users/mag1cian/dev/mr/mr-tmp";
-const _LOG_PATH: &str = "/Users/mag1cian/dev/mr/log";
 
 // TODO: add file
-pub fn init_logger() {
-    tracing_subscriber::fmt::init();
-}
 
 pub fn temp_file() -> String {
     let mut path = PathBuf::from(TMP_PATH);

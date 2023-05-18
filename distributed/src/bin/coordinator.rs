@@ -3,10 +3,12 @@ use clap::Parser;
 use crossbeam_queue::ArrayQueue;
 use dashmap::DashMap;
 use distributed::{
-    init_logger,
     service::{map_reduce_server::*, *},
     ADDR,
 };
+use ::time::macros::format_description;
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::fmt::time::LocalTime;
 use std::{
     path::PathBuf,
     sync::{
@@ -220,9 +222,24 @@ impl MapReduce for Coordinator {
     }
 }
 
+const LOG_PATH :&str = "/Users/mag1cian/dev/mr/log";
+fn init_logger() -> WorkerGuard {
+    let format = tracing_subscriber::fmt::format().compact();
+    let appender = tracing_appender::rolling::never(LOG_PATH, "coordinator.log");
+    let (non_blockking_appender, guard) = tracing_appender::non_blocking(appender);
+    let lt = LocalTime::new(format_description!("[hour]:[minute]:[second]"));
+    tracing_subscriber::fmt()
+        .event_format(format)
+        .with_ansi(false)
+        .with_timer(lt)
+        .with_writer(non_blockking_appender)
+        .init();
+    guard
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_logger();
+    let _log_guard = init_logger();
 
     let cli = Cli::parse();
     let (tx, rx) = oneshot::channel::<()>();
