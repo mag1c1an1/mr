@@ -10,8 +10,10 @@ use futures::{future::try_join_all, FutureExt};
 use itertools::Itertools;
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
+    env,
     fmt::Debug,
     hash::{Hash, Hasher},
+    io::Write,
     process,
     time::Duration,
 };
@@ -42,10 +44,8 @@ struct Worker {
 impl Debug for Worker {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Worker")
-            .field("cli", &self.cli)
             .field("id", &self.id)
             .field("app", &self.app.app_name)
-            .field("client", &self.client)
             .finish()
     }
 }
@@ -113,6 +113,52 @@ impl Worker {
 
     #[instrument]
     pub async fn run_map(&self, task: MapTask) -> Result<HashMap<u64, String>> {
+        info!("???");
+        let MapTask {
+            index,
+            files,
+            n_reduce,
+        } = task;
+
+        let mut k1v1s = vec![];
+        for name in files {
+            info!("filename is :{}", name);
+            let s = std::fs::read_to_string(&name)?;
+            info!("s len {}", s.len());
+            k1v1s.push((name, s));
+        }
+
+        let k2v2s = k1v1s.into_iter().flat_map(|(k, s)| self.app.map(&k, &s));
+
+        let intermediate_filenames = (0..n_reduce)
+            .map(|j| format!("mr-{}-{}-{}", index, j, Uuid::new_v4()))
+            .collect_vec();
+        let mut intermediate_files = vec![];
+        for f in intermediate_filenames.iter() {
+            let ff = std::fs::File::create(f)?;
+            intermediate_files.push(ff);
+        }
+
+        for KeyValue { key, value } in k2v2s {
+            let file_index = {
+                let mut hasher = DefaultHasher::new();
+                key.hash(&mut hasher);
+                (hasher.finish() % n_reduce) as usize
+            };
+            let file = intermediate_files.get_mut(file_index).unwrap();
+            file.write_all(format!("{} {}\n", key, value).as_bytes())?;
+        }
+
+        Ok(intermediate_filenames
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| (i as u64, f))
+            .collect())
+    }
+
+    #[instrument]
+    pub async fn do_map(&self, task: MapTask) -> Result<HashMap<u64, String>> {
+        // async write to file
         let MapTask {
             index,
             files,
@@ -129,7 +175,7 @@ impl Worker {
         let k2v2s = k1v1s.into_iter().flat_map(|(k, v)| self.app.map(&k, &v));
 
         let intermediate_filenames = (0..n_reduce)
-            .map(|j| format!("out/mr-{}-{}-{}", index, j, Uuid::new_v4().to_string()))
+            .map(|j| format!("mr-{}-{}-{}", index, j, Uuid::new_v4()))
             .collect_vec();
         let mut intermediate_files =
             try_join_all(intermediate_filenames.iter().map(File::create)).await?;
@@ -157,19 +203,47 @@ impl Worker {
     #[instrument]
     pub async fn run_reduce(&self, task: ReduceTask) -> Result<()> {
         let ReduceTask { index, files } = task;
+        let mut kvs = vec![];
+        for f in files.iter() {
+            let s = std::fs::read_to_string(f).expect(&format!("can not read file: {}", f));
+            for line in s.lines() {
+                let mut tokens = line.split_whitespace();
+                kvs.push(KeyValue {
+                    key: tokens.next().unwrap().to_owned(),
+                    value: tokens.next().unwrap().to_owned(),
+                })
+            }
+        }
+        kvs.sort();
+        let (temp_path, output_path) = (temp_file(), format!("mr-out-{}", index));
+        info!("tmp_path: {} ",temp_path);
+        let mut temp_file = std::fs::File::create(&temp_path)?;
+        for (k, ks) in kvs.into_iter().group_by(|kv| kv.key.clone()).into_iter() {
+            let output = self.app.reduce(&k, ks.map(|kv| kv.value).collect_vec());
+            temp_file.write_all(output.as_bytes())?;
+        }
+        // rename
+        std::fs::rename(temp_path, output_path)?;
+        Ok(())
+    }
+    #[instrument]
+    pub async fn do_reduce(&self, task: ReduceTask) -> Result<()> {
+        // async write
+        let ReduceTask { index, files } = task;
 
         let k2v2s = {
             let kv_futures = files.into_iter().map(|file| {
-                read_to_string(file.clone()).map(|result| {
+                info!("current dir is {}", env::current_dir().unwrap().display());
+                read_to_string(file).map(|result| {
                     result.map(|content| {
                         content
                             .lines()
                             .map(|line| {
                                 let mut tokens = line.split_whitespace();
-                                (
-                                    tokens.next().unwrap().to_owned(),
-                                    tokens.next().unwrap().to_owned(),
-                                )
+                                KeyValue {
+                                    key: tokens.next().unwrap().to_owned(),
+                                    value: tokens.next().unwrap().to_owned(),
+                                }
                             })
                             .collect_vec()
                     })
@@ -186,10 +260,10 @@ impl Worker {
             k2v2s
         };
 
-        let (temp_path, output_path) = (temp_file(), format!("out/mr-out-{}", index));
+        let (temp_path, output_path) = (temp_file(), format!("mr-out-{}", index));
         let mut temp_file = File::create(&temp_path).await?;
-        for (k, kvs) in k2v2s.into_iter().group_by(|kv| kv.0.clone()).into_iter() {
-            let output = self.app.reduce(&k, kvs.map(|kv| kv.1).collect_vec());
+        for (k, kvs) in k2v2s.into_iter().group_by(|kv| kv.key.clone()).into_iter() {
+            let output = self.app.reduce(&k, kvs.map(|kv| kv.value).collect_vec());
             write_kv!(temp_file, k, output).await?;
         }
 

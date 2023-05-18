@@ -21,14 +21,9 @@ message Task {
 }
 
 service MapReduce {
-  rpc SayHello(HelloRequest) returns (HelloReply);
-
   rpc PollTask(PollTaskRequest) returns (PollTaskReply);
   rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskReply);
 }
-
-message HelloRequest { string name = 1; }
-message HelloReply { string message = 1; }
 
 message PollTaskRequest {}
 message PollTaskReply {

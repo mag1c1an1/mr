@@ -1,14 +1,26 @@
 use std::path::PathBuf;
 use uuid::Uuid;
 pub mod service {
+    use std::fmt::Display;
+
     tonic::include_proto!("service");
+    impl Display for PollTaskReply {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "PollTaskReply:{{ task: {:?}, shutdown: {} }}",
+                self.task, self.shutdown
+            )
+        }
+    }
 }
 
 pub const ADDR: &str = "[::1]:56789";
 
-const TMP_PATH: &str = "/Users/mag1cian/dev/mr/tmp";
+const TMP_PATH: &str = "/Users/mag1cian/dev/mr/mr-tmp";
+const _LOG_PATH: &str = "/Users/mag1cian/dev/mr/log";
 
-// TODO: add file appender
+// TODO: add file
 pub fn init_logger() {
     tracing_subscriber::fmt::init();
 }

@@ -20,8 +20,8 @@ use tokio::{
     task::JoinHandle,
     time,
 };
-use tonic::{transport::Server, Request, Response, Status};
-use tracing::{info, warn};
+use tonic::{transport::Server, Request, Response};
+use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
 #[derive(Parser, Debug)]
@@ -36,7 +36,6 @@ pub struct Cli {
 type TaskId = String;
 type TaskMap = DashMap<TaskId, Task>;
 
-#[derive(Debug)]
 pub struct Coordinator {
     cli: Cli,
     shutdown: Mutex<Option<oneshot::Sender<()>>>,
@@ -49,6 +48,7 @@ pub struct Coordinator {
 
 impl Coordinator {
     fn init_map(&self) {
+        // each file is a map task
         let map_tasks = self
             .cli
             .input_files
@@ -60,11 +60,11 @@ impl Coordinator {
                 n_reduce: self.cli.n_reduce,
             });
 
-        for task in map_tasks {
+        for t in map_tasks {
             let id = Uuid::new_v4().to_string();
             let task = Task {
                 id,
-                inner: Some(task::Inner::MapTask(task)),
+                inner: Some(task::Inner::MapTask(t)),
             };
             self.pending_tasks.push(task).unwrap();
         }
@@ -105,21 +105,35 @@ impl Coordinator {
     }
 }
 
+impl std::fmt::Debug for Coordinator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Coordinator")
+            .field("pending_tasks_len", &self.pending_tasks.len())
+            .field("running_tasks_len", &self.running_tasks.len())
+            .field("reduce_files", &self.reduce_files)
+            .field("retry_handlers_len", &self.retry_handlers.len())
+            .finish()
+    }
+}
+
 impl Coordinator {
+    // retry
     fn spawn_retry(&self, task: &Task) {
         let id = task.id.clone();
 
         let pending = Arc::clone(&self.pending_tasks);
         let running = Arc::clone(&self.running_tasks);
-
+        // new async work
         let handler = tokio::spawn(async move {
             use dashmap::mapref::entry::Entry;
-
+            // wait 5 secs
             time::sleep(Duration::from_secs(5)).await;
             if let Entry::Occupied(o) = running.entry(id) {
                 let mut task = o.remove_entry().1;
                 warn!("task timeout: {:?}", task);
+                // reset task id
                 task.id = Uuid::new_v4().to_string();
+                // TODO queue task overflow?
                 pending.push(task).unwrap();
             }
         });
@@ -132,6 +146,7 @@ impl Coordinator {
     }
 
     async fn shutdown(&self) {
+        // only once
         let mut inner = self.shutdown.lock().await;
         if let Some(sender) = inner.take() {
             let _ = sender.send(());
@@ -141,16 +156,6 @@ impl Coordinator {
 
 #[tonic::async_trait]
 impl MapReduce for Coordinator {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
-        let name = request.into_inner().name;
-        Ok(Response::new(HelloReply {
-            message: format!("Hello, {}!", name),
-        }))
-    }
-
     async fn poll_task(
         &self,
         _request: Request<PollTaskRequest>,
@@ -172,10 +177,10 @@ impl MapReduce for Coordinator {
             },
         };
 
-        info!("poll task reply: {:?}", reply);
+        info!("{}", reply);
         Ok(Response::new(reply))
     }
-
+    #[instrument]
     async fn complete_task(
         &self,
         request: Request<CompleteTaskRequest>,
@@ -184,7 +189,7 @@ impl MapReduce for Coordinator {
         let task = task.ok_or(tonic::Status::invalid_argument(""))?;
 
         if self.running_tasks.remove(&task.id).is_some() {
-            info!("task done: {:?}", task);
+            info!("Task Done id: {}", task.id);
             if let Some((_, handler)) = self.retry_handlers.remove(&task.id) {
                 handler.abort()
             }

@@ -1,3 +1,5 @@
+APP := "wc"
+
 app: 
     @for file in `ls ./apps`; do \
     rustc --edition 2021 --out-dir ./applibs ./apps/$file; \
@@ -6,8 +8,32 @@ app:
 build: clean app
     cargo build --release
 
-seq: build
-    cargo run --release --package sequential -- -a wc txts/*
+seq: 
+    cargo run --release --package sequential -- -a {{APP}}  txts/*
+
+dist: 
+    just dist-coordinator
+    sleep 1
+    just dist-workers
+    sleep 1
+    just merge
+
+dist-coordinator:
+    cargo run --release --package distributed --bin coordinator -- txts/*
+
+dist-worker:
+    cargo run --release --package distributed --bin worker -- -a {{APP}} 
+
+dist-workers:
+    just dist-worker &    
+    just dist-worker &    
+    just dist-worker
+
+merge:  
+    cd out && sort mr-out* | rg . > mr-all
+
+diff:
+    diff out/mr-ans out/mr-all
 
 clean_tmp:
     @rm -rf mr-tmp

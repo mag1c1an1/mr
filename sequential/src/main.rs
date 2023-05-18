@@ -4,7 +4,7 @@ use itertools::Itertools;
 use std::{
     fs::{read_to_string, File},
     io::Write,
-    path::Path ,
+    path::Path,
 };
 
 #[derive(Parser, Debug)]

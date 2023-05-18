@@ -1,5 +1,5 @@
 #![crate_type = "dylib"]
-
+#![allow(unused)]
 struct KeyValue {
     key: String,
     value: String,
