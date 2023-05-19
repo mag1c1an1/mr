@@ -70,6 +70,8 @@ impl Coordinator {
             };
             self.pending_tasks.push(task).unwrap();
         }
+        self.retry_handlers.iter().for_each(|r| r.abort());
+        self.retry_handlers.clear();
     }
 
     fn init_reduce(&self) {
@@ -88,6 +90,8 @@ impl Coordinator {
             };
             self.pending_tasks.push(task).unwrap();
         }
+        self.retry_handlers.iter().for_each(|r| r.abort());
+        self.retry_handlers.clear();
     }
 
     pub fn new(cli: Cli, shutdown: oneshot::Sender<()>) -> Self {
@@ -128,7 +132,7 @@ impl Coordinator {
         // new async work
         let handler = tokio::spawn(async move {
             use dashmap::mapref::entry::Entry;
-            // wait 5 secs
+            // wait 10 secs for job_count
             time::sleep(Duration::from_secs(10)).await;
             if let Entry::Occupied(o) = running.entry(id) {
                 let mut task = o.remove_entry().1;
@@ -251,8 +255,8 @@ async fn main() -> Result<()> {
         .add_service(server)
         .serve_with_shutdown(addr, async move {
             rx.await.ok();
-            // sleep 5s
-            time::sleep(Duration::from_millis(2000)).await;
+            // sleep 1s
+            time::sleep(Duration::from_millis(1000)).await;
         })
         .await?;
     Ok(())
