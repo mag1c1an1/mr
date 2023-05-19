@@ -14,7 +14,8 @@ struct Cli {
     input_files: Vec<String>,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let app = App::load(&cli.app_name)?;
 
@@ -23,12 +24,13 @@ fn main() -> anyhow::Result<()> {
         .iter()
         .flat_map(|file| {
             let content = read_to_string(file).unwrap();
-            app.map(&file, &content)
+            app.map(file, &content)
         })
         .collect_vec();
+
     intermediate.sort();
 
-    let mut output_file = File::create(Path::new("mr-seq"))?;
+    let mut output_file = File::create(Path::new(&format!("mr-{}-seq", &cli.app_name)))?;
     for (k, kvs) in intermediate
         .into_iter()
         .group_by(|kv| kv.key.clone())

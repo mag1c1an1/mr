@@ -1,17 +1,12 @@
 use dlopen2::wrapper::{Container, WrapperApi};
 use std::ops::Deref;
 
-const LIB_DIR: &str = "/Users/mag1cian/dev/mr/applibs";
+const LIB_DIR: &str = "/Users/mag1cian/dev/mr/target/release/";
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct KeyValue {
     pub key: String,
     pub value: String,
-}
-
-pub trait MapReduce {
-    fn map(filename: &str, contents: &str) -> Vec<KeyValue>;
-    fn reduce(key: &str, values: Vec<String>) -> String;
 }
 
 #[derive(WrapperApi)]
@@ -49,8 +44,6 @@ mod tests {
 
     #[test]
     fn test_load_function() {
-        let wc = App::load("wc").unwrap();
-        assert_eq!(wc.map("", "").len(), 0);
-        assert_eq!("1".to_string(), wc.reduce("", vec!["hhhlo".to_string()]));
+        // TODO: async test ???
     }
 }

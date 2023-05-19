@@ -1,3 +1,4 @@
+use ::time::macros::format_description;
 use anyhow::Result;
 use clap::Parser;
 use crossbeam_queue::ArrayQueue;
@@ -6,9 +7,6 @@ use distributed::{
     service::{map_reduce_server::*, *},
     ADDR,
 };
-use ::time::macros::format_description;
-use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::fmt::time::LocalTime;
 use std::{
     path::PathBuf,
     sync::{
@@ -24,6 +22,8 @@ use tokio::{
 };
 use tonic::{transport::Server, Request, Response};
 use tracing::{info, instrument, warn};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::fmt::time::LocalTime;
 use uuid::Uuid;
 
 #[derive(Parser, Debug)]
@@ -129,13 +129,13 @@ impl Coordinator {
         let handler = tokio::spawn(async move {
             use dashmap::mapref::entry::Entry;
             // wait 5 secs
-            time::sleep(Duration::from_secs(5)).await;
+            time::sleep(Duration::from_secs(10)).await;
             if let Entry::Occupied(o) = running.entry(id) {
                 let mut task = o.remove_entry().1;
                 warn!("task timeout: {:?}", task);
                 // reset task id
                 task.id = Uuid::new_v4().to_string();
-                // TODO queue task overflow?
+                // TODO: queue task overflow?
                 pending.push(task).unwrap();
             }
         });
@@ -222,7 +222,7 @@ impl MapReduce for Coordinator {
     }
 }
 
-const LOG_PATH :&str = "/Users/mag1cian/dev/mr/log";
+const LOG_PATH: &str = "/Users/mag1cian/dev/mr/log";
 fn init_logger() -> WorkerGuard {
     let format = tracing_subscriber::fmt::format().compact();
     let appender = tracing_appender::rolling::never(LOG_PATH, "coordinator.log");
@@ -251,7 +251,8 @@ async fn main() -> Result<()> {
         .add_service(server)
         .serve_with_shutdown(addr, async move {
             rx.await.ok();
-            time::sleep(Duration::from_millis(1000)).await;
+            // sleep 5s
+            time::sleep(Duration::from_millis(2000)).await;
         })
         .await?;
     Ok(())
